@@ -119,7 +119,7 @@ def create_service_row(service):
     service_labels[service] = {"frame": frame, "icon": status_icon}
 
 # Default services
-default_services = ["MongoDB", "MySQL80", "MSSQLSERVER"]
+default_services = ["MongoDB", "MySQL80", "MSSQLSERVER", "SQLEXPRESS"]
 for service in default_services:
     create_service_row(service)
 
