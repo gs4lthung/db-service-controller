@@ -4,19 +4,18 @@ import ctypes
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# Check if the script is running with admin privileges
+# Check if script is run as Administrator
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except:
         return False
 
-# Restart script as admin if needed
 if not is_admin():
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
     sys.exit()
 
-# Function to check service status
+# Get the current status of a service
 def get_service_status(service):
     try:
         result = subprocess.run(f"sc query {service}", shell=True, capture_output=True, text=True)
@@ -29,32 +28,41 @@ def get_service_status(service):
     except:
         return "❌"
 
-# Function to start or stop service with a loading effect
+# Start or Stop a service
 def control_service(service, action):
     try:
-        service_labels[service]["icon"].config(text="⏳")  # Show loading icon
+        service_labels[service]["icon"].config(text="⏳")
         log_label.config(text=f"{action.capitalize()}ing {service}...", fg="#3498db")
-        root.update_idletasks()  # Refresh UI
-        
-        # Execute command
-        cmd = f"sc {action} {service}" if action in ["start", "stop"] else ""
-        subprocess.run(cmd, shell=True, check=True)
-
-        # Refresh service status
-        update_status()
+        root.update_idletasks()
+        subprocess.run(f"sc {action} {service}", shell=True, check=True)
         log_label.config(text=f"{service} {action}ed successfully.", fg="#2ECC71")
-
     except Exception as e:
         log_label.config(text=f"❌ Error: {e}", fg="red")
+    update_status()
 
-# Update service status indicators
+# Refresh statuses every 3 seconds
 def update_status():
     for service in list(service_labels.keys()):
-        status_icon = get_service_status(service)
-        service_labels[service]["icon"].config(text=status_icon)
-    root.after(3000, update_status)  # Refresh every 3 seconds
+        status = get_service_status(service)
+        icon = service_labels[service]["icon"]
+        icon.config(text=status)
 
-# Function to add a new service
+        start_btn = service_labels[service]["start_btn"]
+        stop_btn = service_labels[service]["stop_btn"]
+
+        if status == "✔️":
+            start_btn.state(["disabled"])
+            stop_btn.state(["!disabled"])
+        elif status == "⛔":
+            start_btn.state(["!disabled"])
+            stop_btn.state(["disabled"])
+        else:
+            start_btn.state(["disabled"])
+            stop_btn.state(["disabled"])
+
+    root.after(3000, update_status)
+
+# Add new service from entry
 def add_service():
     service_name = service_entry.get().strip()
     if service_name and service_name not in service_labels:
@@ -63,46 +71,61 @@ def add_service():
     else:
         messagebox.showwarning("Invalid Input", "Service name cannot be empty or duplicate!")
 
-# Function to remove a service
+# Remove a service
 def remove_service(service):
     if service in service_labels:
         service_labels[service]["frame"].destroy()
         del service_labels[service]
 
-# Center the window on the screen
-def center_window(win, width=550, height=500):
+# Center the window
+def center_window(win, width=600, height=600):
     screen_width = win.winfo_screenwidth()
     screen_height = win.winfo_screenheight()
     x = (screen_width // 2) - (width // 2)
     y = (screen_height // 2) - (height // 2)
     win.geometry(f"{width}x{height}+{x}+{y}")
 
-# Create Tkinter Window
+# Main window setup
 root = tk.Tk()
-root.title("🖥️ Database Service Controller")
-root.configure(bg="#2C3E50")  # Dark blue background
-
-# Center Window
+root.title("🖥️ Service Manager")
+root.configure(bg="#2C3E50")
 center_window(root)
+root.rowconfigure(1, weight=1)
+root.columnconfigure(0, weight=1)
 
 # Title
-title_label = tk.Label(root, text="🖥️ Database Service Controller", font=("Arial", 16, "bold"), fg="white", bg="#2C3E50")
-title_label.pack(pady=10)
+title_label = tk.Label(root, text="🖥️ Service Manager", font=("Arial", 16, "bold"), fg="white", bg="#2C3E50")
+title_label.grid(row=0, column=0, pady=10)
 
-# Frame for services (Glassmorphism effect)
-service_frame = tk.Frame(root, bg="#34495E", bd=3, relief="ridge")
-service_frame.pack(pady=10, padx=20, fill="both", expand=True)
+# Scrollable area
+container = tk.Frame(root, bg="#2C3E50")
+container.grid(row=1, column=0, sticky="nsew", padx=10)
 
-# Dictionary to store service labels
+canvas = tk.Canvas(container, bg="#2C3E50", highlightthickness=0)
+scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+scrollable_frame = tk.Frame(canvas, bg="#2C3E50")
+
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+)
+
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+
+# Dictionary to store UI components for services
 service_labels = {}
 
-# Function to create a service row
+# Create a service row
 def create_service_row(service):
-    frame = tk.Frame(service_frame, bg="#1C2833", bd=3, relief="ridge")
-    frame.pack(pady=8, padx=15, fill="x")
+    frame = tk.Frame(scrollable_frame, bg="#1C2833", bd=3, relief="ridge")
+    frame.pack(pady=8, padx=10, fill="x")
 
-    name_label = tk.Label(frame, text=service, font=("Arial", 12, "bold"), width=15, anchor="w", bg="#1C2833", fg="#ECF0F1")
-    name_label.pack(side="left", padx=10, pady=5)
+    name_label = tk.Label(frame, text=service, font=("Arial", 12, "bold"), width=20, anchor="w", bg="#1C2833", fg="#ECF0F1")
+    name_label.pack(side="left", padx=10)
 
     status_icon = tk.Label(frame, text="⚠️", font=("Arial", 14), fg="#F1C40F", bg="#1C2833")
     status_icon.pack(side="left", padx=10)
@@ -116,29 +139,34 @@ def create_service_row(service):
     start_button = ttk.Button(frame, text="Start", command=lambda: control_service(service, "start"))
     start_button.pack(side="right", padx=5)
 
-    service_labels[service] = {"frame": frame, "icon": status_icon}
+    service_labels[service] = {
+        "frame": frame,
+        "icon": status_icon,
+        "start_btn": start_button,
+        "stop_btn": stop_button
+    }
 
-# Default services
-default_services = ["MongoDB", "MySQL80", "MSSQLSERVER", "SQLEXPRESS"]
-for service in default_services:
-    create_service_row(service)
+# Default services (change as needed)
+default_services = ["MongoDB", "MySQL80", "MSSQLServer", "Jenkins"]
+for svc in default_services:
+    create_service_row(svc)
 
-# Input area to add new services
+# Add service input
 input_frame = tk.Frame(root, bg="#2C3E50")
-input_frame.pack(pady=10)
+input_frame.grid(row=2, column=0, pady=10)
 
-service_entry = ttk.Entry(input_frame, width=30)
-service_entry.pack(side="left", padx=5)
+service_entry = tk.Entry(input_frame, font=("Arial", 12), width=25)
+service_entry.pack(side="left", padx=(10, 5))
 
 add_button = ttk.Button(input_frame, text="➕ Add Service", command=add_service)
-add_button.pack(side="left", padx=5)
+add_button.pack(side="left")
 
-# Log Section
-log_label = tk.Label(root, text="Logs will appear here...", font=("Arial", 10), fg="#BDC3C7", bg="#2C3E50")
-log_label.pack(pady=5, padx=10, fill="x")
+# Status log label
+log_label = tk.Label(root, text="", font=("Arial", 11), bg="#2C3E50", fg="#ECF0F1")
+log_label.grid(row=3, column=0, pady=5)
 
-# Initial status check
+# Start updating status loop
 update_status()
 
-# Run the Tkinter loop
+# Run the app
 root.mainloop()
